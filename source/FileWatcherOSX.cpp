@@ -31,6 +31,7 @@
 #include <stdlib.h>
 #include <dirent.h>
 #include <string.h>
+#include <stack>
 
 
 namespace FW
@@ -356,7 +357,7 @@ namespace FW
 	}
 
 	//--------
-	WatchID FileWatcherOSX::addWatch(const String& directory, FileWatchListener* watcher, bool recursive)
+	WatchID FileWatcherOSX::addWatch(const String& startDirectory, FileWatchListener* watcher, bool recursive)
 	{
 /*		int fd = open(directory.c_str(), O_RDONLY);
 		if(fd == -1)
@@ -368,8 +369,48 @@ namespace FW
 			   0, (void*)"testing");
 */
 		
-		WatchStruct* watch = new WatchStruct(++mLastWatchID, directory, watcher);
+		WatchStruct* watch = new WatchStruct(++mLastWatchID, startDirectory, watcher);
 		mWatches.insert(std::make_pair(mLastWatchID, watch));
+
+		if (recursive)
+        {
+            std::stack<std::string> directoryStack;
+            directoryStack.push(startDirectory);
+            while(!directoryStack.empty())
+            {
+                String currentDirectory = directoryStack.top();
+                directoryStack.pop();
+                
+                // scan directory and call addFile(name, false) on each file
+                DIR* dir = opendir(currentDirectory.c_str());
+                if(!dir)
+                    throw FileNotFoundException(currentDirectory);
+                
+                if (currentDirectory != startDirectory)
+                {
+                    WatchStruct* watch = new WatchStruct(++mLastWatchID, currentDirectory, watcher);
+                    mWatches.insert(std::make_pair(mLastWatchID, watch));
+                }
+                
+                struct dirent* entry;
+                struct stat attrib;
+                while((entry = readdir(dir)) != NULL)
+                {
+                    String filename = String(entry->d_name);
+                    String fullFilepath = (currentDirectory + "/" + String(entry->d_name));
+                    stat(fullFilepath.c_str(), &attrib);
+                    if(S_ISDIR(attrib.st_mode))
+                    {
+                        if ((filename != ".") && (filename != "..") && (filename != ".svn") && (filename != ".git"))
+                            directoryStack.push(fullFilepath);
+                    }
+                }
+                
+                closedir(dir);
+            }
+        }
+
+
 		return mLastWatchID;
 	}
 
