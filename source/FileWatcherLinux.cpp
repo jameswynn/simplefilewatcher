@@ -151,8 +151,10 @@ namespace FW
 			{
 				struct inotify_event *pevent = (struct inotify_event *)&buff[i];
 
-				WatchStruct* watch = mWatches[pevent->wd];
-				handleAction(watch, pevent->name, pevent->mask);
+				auto itWatch = mWatches.find(pevent->wd);
+				if (itWatch != mWatches.end()) {
+					handleAction(itWatch->second, pevent->name, pevent->mask);
+				}
 				i += sizeof(struct inotify_event) + pevent->len;
 			}
 		}
